@@ -16,17 +16,22 @@ import pandas as pd
 from .. import storage
 
 CSV = "data/predictions.csv"
+CSV_R = "data/race_results.csv"
 
 
 def export_csv() -> int:
     conn = storage.connect()
-    try:
-        df = pd.read_sql_query("SELECT * FROM predictions", conn)
-    except Exception:
-        df = pd.DataFrame()
+    n = 0
+    for tbl, path in [("predictions", CSV), ("race_results", CSV_R)]:
+        try:
+            df = pd.read_sql_query(f"SELECT * FROM {tbl}", conn)
+        except Exception:
+            df = pd.DataFrame()
+        df.to_csv(path, index=False)
+        if tbl == "predictions":
+            n = len(df)
     conn.close()
-    df.to_csv(CSV, index=False)
-    return len(df)
+    return n
 
 
 def _git(*args):
@@ -41,7 +46,7 @@ def main():
     print(f"predictions.csv 書き出し: {n}行")
     if args.no_push:
         return
-    _git("add", CSV)
+    _git("add", CSV, CSV_R)
     r = _git("commit", "-m", f"data: predictions.csv 更新 ({n}行)")
     if r.returncode != 0 and "nothing to commit" in (r.stdout + r.stderr):
         print("変更なし(commitスキップ)")

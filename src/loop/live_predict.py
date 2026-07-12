@@ -149,19 +149,34 @@ def _show_today(conn, date):
         print(f"  Stream {stream} {label}: {r}レース / {n}記録")
 
 
+RESULTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS race_results (
+    date TEXT NOT NULL, jcd TEXT NOT NULL, rno INTEGER NOT NULL,
+    winner INTEGER, winner_odds REAL, second INTEGER, third INTEGER,
+    PRIMARY KEY (date, jcd, rno)
+);
+"""
+
+
 def reconcile(date=None):
-    """確定分を突合: 的中・払戻を記録し、ストリーム別累積ROIを出す。"""
-    conn = storage.connect(); conn.execute(PRED_SCHEMA)
+    """確定分を突合: 的中・払戻を記録し、結果(1着車等)を保存、ストリーム別累積ROIを出す。"""
+    conn = storage.connect(); conn.execute(PRED_SCHEMA); conn.execute(RESULTS_SCHEMA)
     rows = conn.execute("SELECT DISTINCT date,jcd,rno FROM predictions WHERE settled=0").fetchall()
     for d, j, rno in rows:
-        race = winticket.fetch_race(d, j, rno, with_odds=False)
+        race = winticket.fetch_race(d, j, rno, with_odds=True)
         if not race or not race.get("results"):
             continue
         order = {int(c): int(o) for c, o in race["results"].items()}
         if not order:
             continue
-        winner = min(order, key=lambda c: order[c])
-        top3 = set(sorted(order, key=lambda c: order[c])[:3])
+        ordered = sorted(order, key=lambda c: order[c])
+        winner = ordered[0]
+        top3 = set(ordered[:3])
+        wodds = (race.get("odds", {}).get("win", {}) or {}).get(str(winner))
+        conn.execute("INSERT OR REPLACE INTO race_results VALUES (?,?,?,?,?,?,?)",
+                     (d, j, rno, winner, float(wodds) if wodds else None,
+                      ordered[1] if len(ordered) > 1 else None,
+                      ordered[2] if len(ordered) > 2 else None))
         for pid, stream, bt, combo, o in conn.execute(
                 "SELECT rowid,stream,bet_type,combo,odds_at_decision FROM predictions "
                 "WHERE date=? AND jcd=? AND rno=? AND settled=0", (d, j, rno)).fetchall():
