@@ -1,0 +1,10 @@
+# 大容量DB・モデルは上げない(GitHub 100MB制限/Cloudに載らない)
+data/*.db
+data/*.db-journal
+data/*.joblib
+# 予想の軽量同期CSVだけ追跡
+!data/predictions.csv
+__pycache__/
+*.pyc
+*.log
+.streamlit/secrets.toml
