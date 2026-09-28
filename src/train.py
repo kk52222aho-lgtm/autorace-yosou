@@ -124,6 +124,15 @@ def main():
 
     final = CalibratedClassifierCV(_make_estimator(), method="isotonic", cv=3)
     final.fit(X, y)
+    # 🚨 2026-09-29 に競艇から移植。束が宣言する列とモデルが食う列は、
+    #    **突き合わせん限り合う保証が無い**。競艇では45列で当てはめたのに
+    #    束に「21列」と書いた物をディスクに残した(予測側は形の方を信じる)。
+    #    学習のログは正常に見えるんで、保存の直前に数える以外に見つけようが無い。
+    #    → [[insight_artifact_can_declare_a_lie]] / [[feedback_fix_the_sibling_lane]]
+    _nin = getattr(final, "n_features_in_", None)
+    if _nin is not None and _nin != len(FEATURES):
+        raise RuntimeError(
+            f"束が壊れとる: 宣言 {len(FEATURES)}列 / モデルが食う {_nin}列。保存せん")
     joblib.dump({"model": final, "features": FEATURES}, MODEL_PATH)
     print(f"\nモデルを保存しました: {MODEL_PATH}")
 
