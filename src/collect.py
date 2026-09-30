@@ -16,6 +16,9 @@ from . import storage, winticket as wt
 from .venues import venue_name
 
 
+FIRST_RESULT_HOUR = 11   # これより前に当日の結果を聞いても在り得ん
+
+
 def _dates(start: str, end: str):
     d0 = dt.datetime.strptime(start, "%Y%m%d").date()
     d1 = dt.datetime.strptime(end, "%Y%m%d").date()
@@ -30,6 +33,19 @@ def collect(start: str, end: str, venues: list[str] | None = None,
     conn = storage.connect()
     total_races = total_rows = 0
     for date in _dates(start, end):
+        # 2026-09-30 に競艇から移植。**まだ走っとらんレースの結果は在るわけない。**
+        # この常駐は 09:40 に回るが、実測(63日)で**その日の最初の締切は51日が10時台**
+        # (残りは14〜21時)。つまり観測した全ての日で**最初のレースが締まる前**に
+        # 走っとって、ログに `20260929 伊勢崎(03): 0/8R` と出て1日20本ほど空打ちしとった。
+        # 窓は -14日 なので翌朝の回で必ず拾う。午後に回した時は同日分も取る余地を残す。
+        # → [[insight_window_includes_the_unhappened]]
+        _now = dt.datetime.now()
+        if date > _now.strftime("%Y%m%d"):
+            continue
+        if date == _now.strftime("%Y%m%d") and _now.hour < FIRST_RESULT_HOUR:
+            print(f"  {date}: まだ {FIRST_RESULT_HOUR}時前。"
+                  f"その日の結果は在り得んので飛ばす(最初の締切は10時台が51/63日)")
+            continue
         held = venues or wt.held_venues(date)
         if not held:
             continue
